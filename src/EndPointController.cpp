@@ -1,5 +1,7 @@
 // EndPointController.cpp : Defines the entry point for the console application.
 //
+#include <memory>
+#include <iostream>
 #include <stdio.h>
 #include <wchar.h>
 #include <tchar.h>
@@ -29,50 +31,51 @@ HRESULT SetDefaultAudioPlaybackDevice(LPCWSTR devID)
 // EndPointController.exe [NewDefaultDeviceID]
 int _tmain(int argc, _TCHAR* argv[])
 {
-	// read the command line option, -1 indicates list devices.
-	int option = -1;
-	if (argc == 2) option = atoi((char*)argv[1]);
+	std::locale::global(std::locale(""));
+
+	// read the command line args; no option indicates list devices.
+	const wchar_t * selectedId = nullptr;
+	if (argc == 2) {
+		selectedId = argv[1];
+	}
+
+	bool isSelectedDeviceFound = false;
 
 	HRESULT hr = CoInitialize(NULL);
-	if (SUCCEEDED(hr))
-	{
+	if (SUCCEEDED(hr)) {
 		IMMDeviceEnumerator *pEnum = NULL;
 		// Create a multimedia device enumerator.
 		hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, IID_PPV_ARGS(&pEnum));
-		if (SUCCEEDED(hr))
-		{
+		if (SUCCEEDED(hr)) {
 			IMMDeviceCollection *pDevices;
 			// Enumerate the output devices.
 			hr = pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pDevices);
-			if (SUCCEEDED(hr))
-			{
+			if (SUCCEEDED(hr)) {
 				UINT count;
 				pDevices->GetCount(&count);
-				if (SUCCEEDED(hr))
-				{
-					for (int i = 0; i < count; i++)
-					{
+				if (SUCCEEDED(hr)) {
+					for (int i = 0; i < count; i++) {
 						IMMDevice *pDevice;
 						hr = pDevices->Item(i, &pDevice);
-						if (SUCCEEDED(hr))
-						{
+						if (SUCCEEDED(hr)) {
 							LPWSTR wstrID = NULL;
 							hr = pDevice->GetId(&wstrID);
-							if (SUCCEEDED(hr))
-							{
+							if (SUCCEEDED(hr)) {
 								IPropertyStore *pStore;
 								hr = pDevice->OpenPropertyStore(STGM_READ, &pStore);
-								if (SUCCEEDED(hr))
-								{
+								if (SUCCEEDED(hr)) {
 									PROPVARIANT friendlyName;
 									PropVariantInit(&friendlyName);
 									hr = pStore->GetValue(PKEY_Device_FriendlyName, &friendlyName);
-									if (SUCCEEDED(hr))
-									{
+									if (SUCCEEDED(hr)) {
 										// if no options, print the device
 										// otherwise, find the selected device and set it to be default
-										if (option == -1) printf("Audio Device %d: %ws\n",i, friendlyName.pwszVal);
-										if (i == option) SetDefaultAudioPlaybackDevice(wstrID);
+										if (selectedId == nullptr) {
+											std::wcout << "Audio Device " << wstrID << ":\n  " << friendlyName.pwszVal << std::endl;
+										} else if (wcscmp(selectedId, wstrID) == 0) {
+											SetDefaultAudioPlaybackDevice(wstrID);
+											isSelectedDeviceFound = true;
+										}
 										PropVariantClear(&friendlyName);
 									}
 									pStore->Release();
@@ -87,5 +90,10 @@ int _tmain(int argc, _TCHAR* argv[])
 			pEnum->Release();
 		}
 	}
+
+	if (selectedId != nullptr && !isSelectedDeviceFound) {
+		std::wcout << "Specified device " << selectedId << " not found." << std::endl;
+	}
+
 	return hr;
 }
